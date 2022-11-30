@@ -136,6 +136,7 @@ void exec_cmd_seq(char **parsed_cmd)
         exit(EXIT_FAILURE);
     }
     else if(pid == 0){
+        
         if(execvp(parsed_cmd[0],parsed_cmd) == -1){
             printf("Invalid command\n");
         }
@@ -291,96 +292,200 @@ void send_redirect(char* cmd)
     }
 }
 
-void split_batch(char *line, char **arguments)
+int file_read(char *filename, char **arguments)
 {
-    char *separator;
-    int i = 0;
-
-    separator = strtok(line, "\n");
-    
-    while( separator != NULL) {
-        arguments[i] = strdup(separator);
-        separator = strtok(NULL, "\n");
-        i++;
+    if(filename[strlen(filename) - 1] != 't' || filename[strlen(filename) - 2] != 'x' || filename[strlen(filename) - 3] != 't' || filename[strlen(filename) - 4] != '.') {
+        printf("Não é um arquivo válido\n");
+        exit(1);
     }
+
+    char* readline = NULL;
+    int cont = 0;
+    size_t len = 0;
+
+    FILE *fp = fopen (filename, "r");
+
+    if(!fp){
+        printf("Arquivo não existe\n");
+        exit(1);
+    }
+
+    while ((getline(&readline, &len, fp)) != -1) {
+        
+        if(strncmp(readline,"\n",strlen("\n")) != 0){
+            char *separator = strtok(readline, "\n");
+            arguments[cont] = strdup(separator);
+            
+            cont++;
+        }
+    }
+    
+    fclose(fp);
+
+    return cont;
 }
 
-void exec_cmd_batch(char **parsed_cmd, char *readline)
+void printBatchCommands(char *filename)
 {
-    pid_t pid;
+    char *arguments[MAX_LINE/2 + 1];
 
-    pid = fork();
+    int num_lines = file_read(filename, arguments);
 
-    if(pid < 0){
-        fprintf(stderr, "Fork Failed");
-        exit(EXIT_FAILURE);
+    printf("Commands:\n");
+    
+    for(int i = 0; i< num_lines; i++){
+        printf("%s\n", arguments[i]);
     }
-    else if(pid == 0){
-        if(execvp(parsed_cmd[0],parsed_cmd) == -1){
-            printf("Invalid command\n");
-        }
-        exit(EXIT_SUCCESS);
-    }
-    else{
-        wait(NULL);
-    }
+    printf("\n");
+
+
 }
 
 void batchMode(char *filename)
 {
-    char readline[MAX_LINE];
+    int cont = 0;
+    size_t len = 0;
+
+    int validator = 1;
+    char *input[MAX_LINE];
     char *arguments[MAX_LINE/2 + 1];
-    char *parsed_cmd[MAX_LINE/2 + 1];
-    char *input_copy[MAX_LINE/2 + 1]; 
+    char *parsed_cmd[MAX_LINE/2 +1];
+    char *input_copy[MAX_LINE/2 +1];
     char last_cmd[MAX_LINE/2 +1];
+    int styleMode = 0;
+    int arg_count = 0;
+
+    int size_file = file_read(filename, input);
 
     last_cmd[0] = '\0';
 
-    FILE *fp = fopen (filename, "r");
+    clear_list(arguments);
+    clear_list(parsed_cmd);
 
-    while (fgets(readline, sizeof(readline), fp)){
+    printf("Execution:\n");
 
-        int i = 0;
+    while (cont < size_file) {
 
-        strcpy(last_cmd, readline);
+        // printf("%s\n",readline);
+        strtok(input[cont], "\n");
 
-        printf("%s", readline);
+        if(strncmp(input[cont],"exit",strlen("exit")) == 0){
+            exit(1);
+        }
 
-        split_batch(readline, arguments);
-        
-        if(strncmp(readline,"exit",sizeof("exit")) != 0){
-            if(find_char(arguments[i],'|') == 0){
-                exec_pipe(arguments[i]);
-            }
-            else if(find_char(arguments[i],'>') == 0){
-                send_redirect(arguments[i]);
-            }
-            else if(check_history(arguments[i]) == 0){
-                if(i = 0){
-                    printf("No commands\n");
+        if(styleMode == 0){
+            check_conditions(input[cont], &validator, &styleMode);
+
+            split_allArgs(input[cont], arguments, &arg_count);
+
+            if(check_history(input[cont]) != 0){
+                for(int i = 0; i < arg_count; i++){
+                    strcpy(last_cmd,arguments[i]);
                 }
-                else if(find_char(last_cmd,'|') == 0){
-                    exec_pipe(last_cmd);
+            }
+
+            for(int i = 0; i < arg_count; i++){
+                if(find_char(arguments[i],'|') == 0){
+                    exec_pipe(arguments[i]);
                 }
-                else if(find_char(last_cmd,'>') == 0){
-                    send_redirect(last_cmd);
+                else if(find_char(arguments[i],'>') == 0){
+                    send_redirect(arguments[i]);
+                }
+                else if(check_history(arguments[i]) == 0){
+                    if(last_cmd[0] == '\0'){
+                        printf("No commands\n");
+                    }
+                    else if(find_char(last_cmd,'|') == 0){
+                        exec_pipe(last_cmd);
+                    }
+                    else if(find_char(last_cmd,'>') == 0){
+                        send_redirect(last_cmd);
+                    }
+                    else{
+                        parse_arg(last_cmd,input_copy);
+                        exec_cmd_seq(input_copy);
+                    }
                 }
                 else{
-                    parse_arg(last_cmd,input_copy);
-                    exec_cmd_seq(input_copy);
+                    if(check_cmd(arguments[i]) == 0){
+                        parse_arg(arguments[i], parsed_cmd);
+                        exec_cmd_seq(parsed_cmd);
+                        clear_list(parsed_cmd);
+                    }
+                    else if(check_cmd(arguments[i]) == 1){
+                        validator = 0;
+                    }
+                    else if(check_cmd(arguments[i]) == 2){
+                        styleMode = 0;
+                    }
+                    else if(check_cmd(arguments[i]) == 3){
+                        styleMode = 1;
+                    }
                 }
             }
-            else{
-                if(check_cmd(arguments[i]) == 0){
-                    parse_arg(arguments[i], parsed_cmd);
-                    exec_cmd_seq(parsed_cmd);
-                    clear_list(parsed_cmd);
+
+            arg_count = 0;
+        }
+        
+        if(styleMode == 1){
+
+            check_conditions(input[cont], &validator, &styleMode);
+
+            split_allArgs(input[cont], arguments, &arg_count);
+
+            if(check_history(input[cont]) != 0){
+                for(int i = 0; i < arg_count; i++){
+                    strcpy(last_cmd,arguments[i]);
                 }
             }
+
+            for(int i = 0; i < arg_count; i++){
+                if(find_char(arguments[i],'|') == 0){
+                    exec_pipe(arguments[i]);
+                }
+                else if(find_char(arguments[i],'>') == 0){
+                    send_redirect(arguments[i]);
+                }
+                else if(check_history(arguments[i]) == 0){
+                    if(last_cmd[0] == '\0'){
+                        printf("No commands\n");
+                    }
+                    else if(find_char(last_cmd,'|') == 0){
+                        exec_pipe(last_cmd);
+                    }
+                    else if(find_char(last_cmd,'>') == 0){
+                        send_redirect(last_cmd);
+                    }
+                    else{
+                        parse_arg(last_cmd,input_copy);
+                        exec_cmd_par(input_copy);
+                    }
+                }
+                else{
+                    if(check_cmd(arguments[i]) == 0){
+                        parse_arg(arguments[i], parsed_cmd);
+                        exec_cmd_par(parsed_cmd);
+                        clear_list(parsed_cmd);
+                    }
+                    else if(check_cmd(arguments[i]) == 1){
+                        validator = 0;
+                    }
+                    else if(check_cmd(arguments[i]) == 2){
+                        styleMode = 0;
+                    }
+                    else if(check_cmd(arguments[i]) == 3){
+                        styleMode = 1;
+                    }
+                }
+            }
+            
+            for(int i = 0; i < arg_count; i++){
+                wait(NULL);
+            }
+
+            arg_count = 0;
+            
         }
-        else{
-            break;
-        }
+        cont++;
     }
-    fclose(fp);
 }

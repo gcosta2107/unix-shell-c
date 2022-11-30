@@ -16,18 +16,18 @@ void clear_list(char **list);
 
 void exec_cmd_seq(char **parsed_cmd);
 
-void exec_cmd_batch(char **parsed_cmd, char *readline);
-
 void exec_cmd_par(char **parsed_cmd);
 
 void split_pipe(char *user_input, char **arguments);
 
 void split_send_redirect(char *user_input, char **arguments);
 
-void split_batch(char *line, char **arguments);
-
 void exec_pipe(char* cmd);
 
 void send_redirect(char* cmd);
 
+int file_read(char *filename, char **arguments);
+
 void batchMode(char *filename);
+
+void printBatchCommands(char *filename);

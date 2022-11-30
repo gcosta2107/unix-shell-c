@@ -1,0 +1,7 @@
+ls
+!!
+ls -l; ps -l
+dsaugdashjg
+
+    echo 1;     echo 2;     echo 3
+;;;; ls -l | sort -k 5
